@@ -72,16 +72,17 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     
     //Fonction permettant de consulter les détails d'un ticket, en vérifiant que le jeton est valide
     @Override
-    public String consulterIncidentDetail(Jeton jeton, int i) throws RemoteException {
-		if (auth.getLoginParJeton(jeton) != null) {
+    public Incident consulterIncidentDetail(Jeton jeton, int id) throws RemoteException {
+        String loginDemandeur = auth.getLoginParJeton(jeton);
+
+        if (loginDemandeur != null) {
 			for (Incident incident : incidentEnBase) {
-				if (incident.getIdentifiant() == i) {
-					return incident.toString() + "\nDescription : " + incident.getDescription();
+				if (incident.getIdentifiant() == id && incident.getIdentifiantCreateur().equals(loginDemandeur)) {
+					return incident;
 				}
 			}
-			return "Ticket non trouvé.";
 		}
-		return "Session Expirée";
+		return null;
 	}
 
 }
