@@ -31,7 +31,7 @@ public class Incident {
                 .append("Ticket #").append(identifiant)
                 .append(" [").append(etat).append("]")
                 .append(" - ").append(titre)
-                .append(" (").append(categorie).append(")")
+                .append(" (").append(categorie).append(")").append(dateCreation)
                 .toString();
     }
 
