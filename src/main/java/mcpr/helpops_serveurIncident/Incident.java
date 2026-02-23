@@ -1,4 +1,4 @@
-package mcpr;
+package mcpr.helpops_serveurIncident;
 
 import java.util.Date;
 
@@ -8,14 +8,14 @@ public class Incident {
     private String titre;
     private String categorie;
     private String description;
-    private String etat;
+    private final String etat;
     private final Date dateCreation;
-    private final int identifiantCreateur;
+    private final String identifiantCreateur;
 
     // état de base d'un incident (simplifie les conditions avec une constante)
     public static final String OPEN = "OPEN";
 
-    public Incident(int identifiant, String titre ,String categorie, String description, int identifiantCreateur) {
+    public Incident(int identifiant, String titre, String categorie, String description, String identifiantCreateur) {
         this.identifiant = identifiant;
         this.categorie = categorie;
         this.titre = titre;
@@ -23,6 +23,16 @@ public class Incident {
         this.identifiantCreateur = identifiantCreateur;
         this.etat = OPEN;
         this.dateCreation = new Date();
+    }
+
+    @Override
+    public String toString() {
+        return new StringBuilder()
+                .append("Ticket #").append(identifiant)
+                .append(" [").append(etat).append("]")
+                .append(" - ").append(titre)
+                .append(" (").append(categorie).append(")")
+                .toString();
     }
 
     // méthodes getters
@@ -34,10 +44,7 @@ public class Incident {
         return titre;
     }
 
-    public String getCategorie() {
-        return categorie;
-
-    }
+    public String getCategorie() { return categorie; }
 
     public String getDescription() {
         return description;
@@ -51,7 +58,7 @@ public class Incident {
         return dateCreation;
     }
 
-    public int getIdentifiantCreateur() {
+    public String getIdentifiantCreateur() {
         return identifiantCreateur;
     }
 
