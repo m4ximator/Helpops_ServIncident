@@ -12,7 +12,7 @@ public class Incident {
     private final Date dateCreation;
     private final int identifiantCreateur;
 
-    // état de base d'un incident
+    // état de base d'un incident (simplifie les conditions avec une constante)
     public static final String OPEN = "OPEN";
 
     public Incident(int identifiant, String titre ,String categorie, String description, int identifiantCreateur) {
