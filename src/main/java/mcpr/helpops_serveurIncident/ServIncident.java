@@ -5,6 +5,10 @@ import mcpr.hellpops_interfaces.ITicketService;
 import mcpr.hellpops_interfaces.Incident;
 import mcpr.hellpops_interfaces.Jeton;
 
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.lang.reflect.Type;
 import java.rmi.Naming;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
@@ -13,7 +17,13 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
+
 public class ServIncident extends UnicastRemoteObject implements ITicketService{
+    private final String CHEMIN_FICHIER = "incident.json";
+    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
     private IAuthService auth;
 
@@ -46,6 +56,9 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             StringBuilder chaine = new StringBuilder();
             chaine.append("Ticket #").append(id).append(" créé par ").append(loginCreateur);
             System.out.println(chaine.toString());
+
+            //On sauvegarde le nouvel incident dans un json
+            sauvegarderDonneesIncident();
             return chaine.toString();
         }
         return "Session Expirée";
@@ -58,6 +71,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         if (loginDemandeur != null) {
             //liste vide pour les tickets du client
             List<Incident> ticketsDuClient = new ArrayList<>();
+            // On met à jours la liste des Incidents via le json
+            chargerDonneesIncident();
 
             // Parcours de la liste globale
             for (Incident incident : incidentEnBase) {
@@ -69,22 +84,23 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }
         return null; // Jeton invalide
     }
-    
-    
+
+
     //Fonction permettant de consulter les détails d'un ticket, en vérifiant que le jeton est valide
     @Override
     public Incident consulterIncidentDetail(Jeton jeton, int id) throws RemoteException {
         String loginDemandeur = auth.getLoginParJeton(jeton);
 
         if (loginDemandeur != null) {
-			for (Incident incident : incidentEnBase) {
-				if (incident.getIdentifiant() == id && incident.getIdentifiantCreateur().equals(loginDemandeur)) {
-					return incident;
-				}
-			}
-		}
-		return null;
-	}
+            chargerDonneesIncident();
+            for (Incident incident : incidentEnBase) {
+                if (incident.getIdentifiant() == id && incident.getIdentifiantCreateur().equals(loginDemandeur)) {
+                    return incident;
+                }
+            }
+        }
+        return null;
+    }
 
     @Override
     public Incident modifierIncident(Jeton jeton, int id, String categorie, String titre, String desc) throws RemoteException {
@@ -101,9 +117,43 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                 incidentToModif.setDescription(desc);
             }
         }
+        sauvegarderDonneesIncident();
         return incidentToModif;
     }
 
+    private void sauvegarderDonneesIncident() {
+        //déclaration dans les parenthèses pour fermeture du fichier automatique
+        try (FileWriter writer = new FileWriter(CHEMIN_FICHIER)) {
+            //Transformation liste en texte JSON
+            gson.toJson(incidentEnBase, writer);
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la sauvegarde JSON : " + e.getMessage());
+        }
+    }
 
+    private void chargerDonneesIncident() {
+        File fichier = new File(CHEMIN_FICHIER);
+        if (fichier.exists()) {
+            try (FileReader reader = new FileReader(fichier)) {
+                //Astuce Gson pour lire une liste typée (permet d'instancier le bon type)
+                Type typeListe = new TypeToken<List<Incident>>() {
+                }.getType();
+                List<Incident> usersCharges = gson.fromJson(reader, typeListe);
 
+                if (usersCharges != null) {
+                    incidentEnBase.clear();
+                    incidentEnBase.addAll(usersCharges);
+                    String chaine = "Base chargée : " +
+                            incidentEnBase.size() +
+                            " incidents(s).";
+                    System.out.println(chaine);
+                }
+
+            } catch (Exception e) {
+                System.err.println("Impossible de lire le fichier JSON : " + e.getMessage());
+            }
+        } else {
+            System.out.println("Aucun fichier JSON trouvé, démarrage avec une base vide.");
+        }
+    }
 }
