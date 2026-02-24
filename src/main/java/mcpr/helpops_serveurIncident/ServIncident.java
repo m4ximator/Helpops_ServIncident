@@ -2,6 +2,7 @@ package mcpr.helpops_serveurIncident;
 
 import mcpr.hellpops_interfaces.IAuthService;
 import mcpr.hellpops_interfaces.ITicketService;
+import mcpr.hellpops_interfaces.Incident;
 import mcpr.hellpops_interfaces.Jeton;
 
 import java.rmi.Naming;
@@ -25,7 +26,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     public ServIncident() throws RemoteException {
         super();
         try {
-            auth = (IAuthService) Naming.lookup("rmi://localhodt:1099/AuthService");
+            auth = (IAuthService) Naming.lookup("rmi://localhost:1099/AuthService");
 
         }catch (Exception e){
             System.err.println("Erreur critique : serveur Auth inateignable.");
@@ -84,5 +85,25 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 		}
 		return null;
 	}
+
+    @Override
+    public Incident modifierIncident(Jeton jeton, int id, String categorie, String titre, String desc) throws RemoteException {
+        Incident incidentToModif = consulterIncidentDetail(jeton, id);
+
+        if (incidentToModif != null){
+            if (categorie != null) {
+                incidentToModif.setCategorie(categorie);
+            }
+            if (titre != null) {
+                incidentToModif.setTitre(titre);
+            }
+            if (desc != null) {
+                incidentToModif.setDescription(desc);
+            }
+        }
+        return incidentToModif;
+    }
+
+
 
 }
