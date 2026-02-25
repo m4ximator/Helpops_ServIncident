@@ -35,6 +35,14 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
     public ServIncident() throws RemoteException {
         super();
+        chargerDonneesIncident();
+        int maxId = 0;
+        for (Incident incident : incidentEnBase) {
+            if (incident.getIdentifiant() > maxId) {
+                maxId = incident.getIdentifiant();
+            }
+        }
+        compteurId.set(maxId);
         try {
             auth = (IAuthService) Naming.lookup("rmi://localhost:1099/AuthService");
 
