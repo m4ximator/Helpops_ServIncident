@@ -147,7 +147,6 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                 List<Incident> usersCharges = gson.fromJson(reader, typeListe);
 
                 if (usersCharges != null) {
-                    incidentEnBase.clear();
                     incidentEnBase.addAll(usersCharges);
                     String chaine = "Base chargée : " +
                             incidentEnBase.size() +
