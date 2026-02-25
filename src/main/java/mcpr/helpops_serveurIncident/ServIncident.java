@@ -80,7 +80,6 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             //liste vide pour les tickets du client
             List<Incident> ticketsDuClient = new ArrayList<>();
             // On met à jours la liste des Incidents via le json
-            chargerDonneesIncident();
 
             // Parcours de la liste globale
             for (Incident incident : incidentEnBase) {
@@ -100,7 +99,6 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         String loginDemandeur = auth.getLoginParJeton(jeton);
 
         if (loginDemandeur != null) {
-            chargerDonneesIncident();
             for (Incident incident : incidentEnBase) {
                 if (incident.getIdentifiant() == id && incident.getIdentifiantCreateur().equals(loginDemandeur)) {
                     return incident;
