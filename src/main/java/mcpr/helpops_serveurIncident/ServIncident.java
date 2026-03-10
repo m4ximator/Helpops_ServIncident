@@ -1,9 +1,10 @@
 package mcpr.helpops_serveurIncident;
 
+import mcpr.hellpops_interfaces.Incident;
 import mcpr.hellpops_interfaces.IAuthService;
 import mcpr.hellpops_interfaces.ITicketService;
-import mcpr.hellpops_interfaces.Incident;
 import mcpr.hellpops_interfaces.Jeton;
+import mcpr.hellpops_interfaces.Role;
 
 import java.io.File;
 import java.io.FileReader;
@@ -14,12 +15,15 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
+
+import static mcpr.hellpops_interfaces.Role.AGENT;
 
 public class ServIncident extends UnicastRemoteObject implements ITicketService{
     private final String CHEMIN_FICHIER = "incident.json";
@@ -63,7 +67,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             incidentEnBase.add(incident);
             StringBuilder chaine = new StringBuilder();
             chaine.append("Ticket #").append(id).append(" créé par ").append(loginCreateur);
-            System.out.println(chaine.toString());
+            System.out.println(chaine);
 
             //On sauvegarde le nouvel incident dans un json
             sauvegarderDonneesIncident();
@@ -125,6 +129,64 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }
         sauvegarderDonneesIncident();
         return incidentToModif;
+    }
+
+    @Override
+    public String attribuerIncident(Jeton jeton, int id) throws RemoteException {
+        String nomAgent = jeton.getUsername();
+        Role role = jeton.getRole();
+        Incident attributionIncident = consulterIncidentDetail(jeton, id);
+
+        if (nomAgent != null && role == AGENT) {
+            if (Objects.equals(attributionIncident.getEtat(), "OPEN")) {
+                attributionIncident.setAgentResponsable(nomAgent);
+                attributionIncident.setEtat("Assigned");
+                sauvegarderDonneesIncident();
+                return "Incident attribué";
+            }
+            return "Vous n'avez pas le droit de modifier cet incident";
+        }
+        return null;
+    }
+
+    @Override
+    public List<Incident> consulterIncidentAgent(Jeton jeton) throws RemoteException{
+        String nomAgent = jeton.getUsername();
+        Role role = jeton.getRole();
+
+        if (nomAgent != null && role == AGENT) {
+            //liste vide pour les tickets de l'agent
+            List<Incident> ticketsDeAgent= new ArrayList<>();
+
+            // Parcours de la liste globale
+            for (Incident incident : incidentEnBase) {
+                if (incident.getAgentResponsable().equals(nomAgent)) {
+                    ticketsDeAgent.add(incident);
+                }
+            }
+            return ticketsDeAgent; //liste filtrée
+        }
+        return null; // Jeton invalide ou role non agent
+    }
+
+    @Override
+    public List<Incident> consulterIncidentEnAttente(Jeton jeton) throws RemoteException{
+        String nomAgent = jeton.getUsername();
+        Role role = jeton.getRole();
+
+        if (nomAgent != null && role == AGENT) {
+            //liste vide pour les tickets de l'agent
+            List<Incident> ticketsEnAttente= new ArrayList<>();
+
+            // Parcours de la liste globale
+            for (Incident incident : incidentEnBase) {
+                if (Objects.equals(incident.getEtat(), "OPEN")) {
+                    ticketsEnAttente.add(incident);
+                }
+            }
+            return ticketsEnAttente; //liste filtrée
+        }
+        return null; // Jeton invalide ou role non agent
     }
 
     private void sauvegarderDonneesIncident() {
