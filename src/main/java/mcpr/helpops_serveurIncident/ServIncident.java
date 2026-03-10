@@ -133,46 +133,54 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
     @Override
     public String attribuerIncident(Jeton jeton, int id) throws RemoteException {
-        String nomAgent = jeton.getUsername();
-        Role role = jeton.getRole();
-        Incident attributionIncident = consulterIncidentDetail(jeton, id);
+        String nomAgent = auth.getLoginParJeton(jeton);
+        Role role = auth.getRoleParJeton(jeton);
 
-        if (nomAgent != null && role == AGENT) {
-            if (Objects.equals(attributionIncident.getEtat(), "OPEN")) {
-                attributionIncident.setAgentResponsable(nomAgent);
-                attributionIncident.setEtat("Assigned");
-                sauvegarderDonneesIncident();
-                return "Incident attribué";
-            }
-            return "Vous n'avez pas le droit de modifier cet incident";
+        // Verification droits
+        if (nomAgent == null || role != AGENT) {
+            return "Accès refusé : Vous n'êtes pas un Agent ou session expirée.";
         }
-        return null;
+        Incident attributionIncident = null;
+        for (Incident incident : incidentEnBase) {
+            if (incident.getIdentifiant() == id) {
+                attributionIncident = incident;
+                break;
+            }
+        }
+
+        if ("OPEN".equals(attributionIncident.getEtat())) {
+            attributionIncident.setAgentResponsable(nomAgent);
+            attributionIncident.setEtat("Assigned");
+            sauvegarderDonneesIncident();
+            return "Ticket assigné avec succes !";
+        }
+        return "Impossible : Ce ticket est déjà assigné ou résolu.";
     }
 
     @Override
     public List<Incident> consulterIncidentAgent(Jeton jeton) throws RemoteException{
-        String nomAgent = jeton.getUsername();
-        Role role = jeton.getRole();
+        String nomAgent = auth.getLoginParJeton(jeton);
+        Role role = auth.getRoleParJeton(jeton);
 
         if (nomAgent != null && role == AGENT) {
             //liste vide pour les tickets de l'agent
-            List<Incident> ticketsDeAgent= new ArrayList<>();
+            List<Incident> ticketsAgent= new ArrayList<>();
 
             // Parcours de la liste globale
             for (Incident incident : incidentEnBase) {
-                if (incident.getAgentResponsable().equals(nomAgent)) {
-                    ticketsDeAgent.add(incident);
+                if (incident.getAgentResponsable() != null && incident.getAgentResponsable().equals(nomAgent)) {
+                    ticketsAgent.add(incident);
                 }
             }
-            return ticketsDeAgent; //liste filtrée
+            return ticketsAgent; //liste filtrée
         }
         return null; // Jeton invalide ou role non agent
     }
 
     @Override
     public List<Incident> consulterIncidentEnAttente(Jeton jeton) throws RemoteException{
-        String nomAgent = jeton.getUsername();
-        Role role = jeton.getRole();
+        String nomAgent = auth.getLoginParJeton(jeton);
+        Role role = auth.getRoleParJeton(jeton);
 
         if (nomAgent != null && role == AGENT) {
             //liste vide pour les tickets de l'agent
@@ -180,7 +188,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
             // Parcours de la liste globale
             for (Incident incident : incidentEnBase) {
-                if (Objects.equals(incident.getEtat(), "OPEN")) {
+                if ("OPEN".equals(incident.getEtat())) {
                     ticketsEnAttente.add(incident);
                 }
             }
