@@ -104,7 +104,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
         if (loginDemandeur != null) {
             for (Incident incident : incidentEnBase) {
-                if (incident.getIdentifiant() == id && incident.getIdentifiantCreateur().equals(loginDemandeur)) {
+                if (incident.getIdentifiant() == id && (incident.getIdentifiantCreateur().equals(loginDemandeur) || jeton.getRole() == Role.AGENT)) {
                     return incident;
                 }
             }
