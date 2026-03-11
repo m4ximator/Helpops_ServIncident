@@ -15,7 +15,6 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -53,6 +52,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }catch (Exception e){
             System.err.println("Erreur critique : serveur Auth inateignable.");
         }
+        int compteurLecteur=0;
+        boolean compteurRedacteur=false;
     }
 
     @Override
@@ -115,8 +116,9 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     @Override
     public Incident modifierIncident(Jeton jeton, int id, String categorie, String titre, String desc) throws RemoteException {
         Incident incidentToModif = consulterIncidentDetail(jeton, id);
+        String loginDemandeur = auth.getLoginParJeton(jeton);
 
-        if (incidentToModif != null){
+        if ((incidentToModif != null && incidentToModif.getIdentifiantCreateur().equals(loginDemandeur))){
             if (categorie != null) {
                 incidentToModif.setCategorie(categorie);
             }
@@ -126,13 +128,18 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             if (desc != null) {
                 incidentToModif.setDescription(desc);
             }
+            sauvegarderDonneesIncident();
+            return incidentToModif;
         }
-        sauvegarderDonneesIncident();
-        return incidentToModif;
+        else{
+            System.out.println("Un utilisateur essaye de modifier un ticket qui n'est pas sien");
+            return null;
+        }
+
     }
 
     @Override
-    public String attribuerIncident(Jeton jeton, int id) throws RemoteException {
+    public synchronized String attribuerIncident(Jeton jeton, int id) throws RemoteException {
         String nomAgent = auth.getLoginParJeton(jeton);
         Role role = auth.getRoleParJeton(jeton);
 
@@ -183,22 +190,17 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
     @Override
     public List<Incident> consulterIncidentEnAttente(Jeton jeton) throws RemoteException{
-        String nomAgent = auth.getLoginParJeton(jeton);
-        Role role = auth.getRoleParJeton(jeton);
-
-        if (nomAgent != null && role == AGENT) {
             //liste vide pour les tickets de l'agent
-            List<Incident> ticketsEnAttente= new ArrayList<>();
+        List<Incident> ticketsEnAttente= verifRoleAndCreaList(jeton);
 
-            // Parcours de la liste globale
-            for (Incident incident : incidentEnBase) {
-                if ("OPEN".equals(incident.getEtat())) {
-                    ticketsEnAttente.add(incident);
-                }
+        // Parcours de la liste globale
+        for (Incident incident : incidentEnBase) {
+            if ("OPEN".equals(incident.getEtat())) {
+                ticketsEnAttente.add(incident);
             }
-            return ticketsEnAttente; //liste filtrée
         }
-        return null; // Jeton invalide ou role non agent
+        return ticketsEnAttente; //liste filtrée
+
     }
 
     @Override
@@ -214,7 +216,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         return null;
     }
 
-    private void sauvegarderDonneesIncident() {
+    private synchronized void sauvegarderDonneesIncident() {
         //déclaration dans les parenthèses pour fermeture du fichier automatique
         try (FileWriter writer = new FileWriter(CHEMIN_FICHIER)) {
             //Transformation liste en texte JSON
@@ -246,6 +248,20 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             }
         } else {
             System.out.println("Aucun fichier JSON trouvé, démarrage avec une base vide.");
+        }
+    }
+
+    public List<Incident> verifRoleAndCreaList(Jeton jeton) throws RemoteException {
+        String nomAgent = auth.getLoginParJeton(jeton);
+        Role role = auth.getRoleParJeton(jeton);
+
+        if (nomAgent != null && role == AGENT) {
+            //liste vide pour les tickets de l'agent
+            List<Incident> ticketsAgent = new ArrayList<>();
+            return ticketsAgent;
+        }
+        else {
+            return null;
         }
     }
 }
