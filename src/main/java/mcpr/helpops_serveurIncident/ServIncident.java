@@ -146,6 +146,9 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                 attributionIncident = incident;
                 break;
             }
+            else{
+                return "Id ticket inexistant";
+            }
         }
 
         if ("OPEN".equals(attributionIncident.getEtat())) {
