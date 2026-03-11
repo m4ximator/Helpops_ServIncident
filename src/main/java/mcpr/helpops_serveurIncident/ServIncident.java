@@ -35,6 +35,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
     // Compteur thread-safe pour générer les identifiants
     private final AtomicInteger compteurId = new AtomicInteger(0);
+    private int nbEnLecture=0;
+    private boolean enEcriture=false;
 
     public ServIncident() throws RemoteException {
         super();
@@ -52,8 +54,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }catch (Exception e){
             System.err.println("Erreur critique : serveur Auth inateignable.");
         }
-        int compteurLecteur=0;
-        boolean compteurRedacteur=false;
+
     }
 
     @Override
@@ -63,6 +64,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
         // Si login différent de null, jeton valide
         if (loginCreateur != null){
+            debutEcriture();
             int id = compteurId.incrementAndGet();
             Incident incident = new Incident(id, titre, categorie, desc, loginCreateur);
             incidentEnBase.add(incident);
@@ -72,6 +74,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
             //On sauvegarde le nouvel incident dans un json
             sauvegarderDonneesIncident();
+            finEcriture();
             return chaine.toString();
         }
         return "Session Expirée";
@@ -101,15 +104,18 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     //Fonction permettant de consulter les détails d'un ticket, en vérifiant que le jeton est valide
     @Override
     public Incident consulterIncidentDetail(Jeton jeton, int id) throws RemoteException {
+        debutLecture();
         String loginDemandeur = auth.getLoginParJeton(jeton);
 
         if (loginDemandeur != null) {
             for (Incident incident : incidentEnBase) {
                 if (incident.getIdentifiant() == id && (incident.getIdentifiantCreateur().equals(loginDemandeur) || jeton.getRole() == Role.AGENT)) {
+                    finLecture();
                     return incident;
                 }
             }
         }
+        finLecture();
         return null;
     }
 
@@ -119,6 +125,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         String loginDemandeur = auth.getLoginParJeton(jeton);
 
         if ((incidentToModif != null && incidentToModif.getIdentifiantCreateur().equals(loginDemandeur))){
+            debutEcriture();
             if (categorie != null) {
                 incidentToModif.setCategorie(categorie);
             }
@@ -129,6 +136,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                 incidentToModif.setDescription(desc);
             }
             sauvegarderDonneesIncident();
+            finEcriture();
             return incidentToModif;
         }
         else{
@@ -155,7 +163,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             }
 
         }
-        if(attributionIncident==null){
+        if (attributionIncident==null){
             return "Id ticket inexistant";
         }
 
@@ -170,6 +178,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
     @Override
     public List<Incident> consulterIncidentAgent(Jeton jeton) throws RemoteException{
+        debutLecture();
         String nomAgent = auth.getLoginParJeton(jeton);
         Role role = auth.getRoleParJeton(jeton);
 
@@ -183,13 +192,16 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                     ticketsAgent.add(incident);
                 }
             }
+            finLecture();
             return ticketsAgent; //liste filtrée
         }
+        finLecture();
         return null; // Jeton invalide ou role non agent
     }
 
     @Override
     public List<Incident> consulterIncidentEnAttente(Jeton jeton) throws RemoteException{
+        debutLecture();
             //liste vide pour les tickets de l'agent
         List<Incident> ticketsEnAttente= verifRoleAndCreaList(jeton);
 
@@ -199,20 +211,23 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                 ticketsEnAttente.add(incident);
             }
         }
+        finLecture();
         return ticketsEnAttente; //liste filtrée
 
     }
 
     @Override
     public List<Incident>  consulterTouslesIncidents (Jeton jeton) throws RemoteException{
+        debutLecture();
 
         String username_Agent = auth.getLoginParJeton(jeton);
         Role role_Agent = auth.getRoleParJeton(jeton);
 
         if (username_Agent != null && role_Agent == AGENT) {
+            finLecture();
             return new ArrayList<>(incidentEnBase);
         }
-
+        finLecture();
         return null;
     }
 
@@ -263,5 +278,39 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         else {
             return null;
         }
+    }
+
+    public synchronized void debutLecture() {
+        while(enEcriture) {
+            try {
+                this.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        nbEnLecture++;
+    }
+
+    public synchronized void finLecture() {
+        nbEnLecture--;
+        if(nbEnLecture==0) {
+            this.notify();
+        }
+    }
+
+    public synchronized void debutEcriture() {
+        while(enEcriture || nbEnLecture>0) {
+            try {
+                this.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        enEcriture = true;
+    }
+
+    public synchronized void finEcriture() {
+        enEcriture = false;
+        this.notifyAll();
     }
 }
