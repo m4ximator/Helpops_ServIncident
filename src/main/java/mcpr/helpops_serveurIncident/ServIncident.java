@@ -200,6 +200,19 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         return null; // Jeton invalide ou role non agent
     }
 
+    @Override
+    public List<Incident>  consulterTouslesIncidents (Jeton jeton) throws RemoteException{
+
+        String username_Agent = auth.getLoginParJeton(jeton);
+        Role role_Agent = auth.getRoleParJeton(jeton);
+
+        if (username_Agent != null && role_Agent == AGENT) {
+            return new ArrayList<>(incidentEnBase);
+        }
+
+        return null;
+    }
+
     private void sauvegarderDonneesIncident() {
         //déclaration dans les parenthèses pour fermeture du fichier automatique
         try (FileWriter writer = new FileWriter(CHEMIN_FICHIER)) {
