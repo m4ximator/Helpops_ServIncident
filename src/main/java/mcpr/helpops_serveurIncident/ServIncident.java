@@ -25,7 +25,7 @@ import com.google.gson.reflect.TypeToken;
 
 import static mcpr.hellpops_interfaces.Role.AGENT;
 
-public class ServIncident extends UnicastRemoteObject implements ITicketService{
+public class ServIncident extends UnicastRemoteObject implements ITicketService {
     private final String CHEMIN_FICHIER = "incident.json";
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
@@ -50,7 +50,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         try {
             auth = (IAuthService) Naming.lookup("rmi://localhost:1099/AuthService");
 
-        }catch (Exception e){
+        } catch (Exception e) {
             System.err.println("Erreur critique : serveur Auth inateignable.");
         }
     }
@@ -61,7 +61,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         String loginCreateur = auth.getLoginParJeton(jeton);
 
         // Si login différent de null, jeton valide
-        if (loginCreateur != null){
+        if (loginCreateur != null) {
             int id = compteurId.incrementAndGet();
             Incident incident = new Incident(id, titre, categorie, desc, loginCreateur);
             incidentEnBase.add(incident);
@@ -69,7 +69,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             chaine.append("Ticket #").append(id).append(" créé par ").append(loginCreateur);
             System.out.println(chaine);
 
-            //On sauvegarde le nouvel incident dans un json
+            // On sauvegarde le nouvel incident dans un json
             sauvegarderDonneesIncident();
             return chaine.toString();
         }
@@ -81,7 +81,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         String loginDemandeur = auth.getLoginParJeton(jeton);
 
         if (loginDemandeur != null) {
-            //liste vide pour les tickets du client
+            // liste vide pour les tickets du client
             List<Incident> ticketsDuClient = new ArrayList<>();
             // On met à jours la liste des Incidents via le json
 
@@ -91,20 +91,21 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                     ticketsDuClient.add(incident);
                 }
             }
-            return ticketsDuClient; //liste filtrée
+            return ticketsDuClient; // liste filtrée
         }
         return null; // Jeton invalide
     }
 
-
-    //Fonction permettant de consulter les détails d'un ticket, en vérifiant que le jeton est valide
+    // Fonction permettant de consulter les détails d'un ticket, en vérifiant que le
+    // jeton est valide
     @Override
     public Incident consulterIncidentDetail(Jeton jeton, int id) throws RemoteException {
         String loginDemandeur = auth.getLoginParJeton(jeton);
 
         if (loginDemandeur != null) {
             for (Incident incident : incidentEnBase) {
-                if (incident.getIdentifiant() == id && (incident.getIdentifiantCreateur().equals(loginDemandeur) || jeton.getRole() == Role.AGENT)) {
+                if (incident.getIdentifiant() == id && (incident.getIdentifiantCreateur().equals(loginDemandeur)
+                        || jeton.getRole() == Role.AGENT)) {
                     return incident;
                 }
             }
@@ -113,10 +114,11 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     }
 
     @Override
-    public Incident modifierIncident(Jeton jeton, int id, String categorie, String titre, String desc) throws RemoteException {
+    public Incident modifierIncident(Jeton jeton, int id, String categorie, String titre, String desc)
+            throws RemoteException {
         Incident incidentToModif = consulterIncidentDetail(jeton, id);
 
-        if (incidentToModif != null){
+        if (incidentToModif != null) {
             if (categorie != null) {
                 incidentToModif.setCategorie(categorie);
             }
@@ -145,8 +147,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             if (incident.getIdentifiant() == id) {
                 attributionIncident = incident;
                 break;
-            }
-            else{
+            } else {
                 return "Id ticket inexistant";
             }
         }
@@ -161,13 +162,13 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     }
 
     @Override
-    public List<Incident> consulterIncidentAgent(Jeton jeton) throws RemoteException{
+    public List<Incident> consulterIncidentAgent(Jeton jeton) throws RemoteException {
         String nomAgent = auth.getLoginParJeton(jeton);
         Role role = auth.getRoleParJeton(jeton);
 
         if (nomAgent != null && role == AGENT) {
-            //liste vide pour les tickets de l'agent
-            List<Incident> ticketsAgent= new ArrayList<>();
+            // liste vide pour les tickets de l'agent
+            List<Incident> ticketsAgent = new ArrayList<>();
 
             // Parcours de la liste globale
             for (Incident incident : incidentEnBase) {
@@ -175,19 +176,19 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                     ticketsAgent.add(incident);
                 }
             }
-            return ticketsAgent; //liste filtrée
+            return ticketsAgent; // liste filtrée
         }
         return null; // Jeton invalide ou role non agent
     }
 
     @Override
-    public List<Incident> consulterIncidentEnAttente(Jeton jeton) throws RemoteException{
+    public List<Incident> consulterIncidentEnAttente(Jeton jeton) throws RemoteException {
         String nomAgent = auth.getLoginParJeton(jeton);
         Role role = auth.getRoleParJeton(jeton);
 
         if (nomAgent != null && role == AGENT) {
-            //liste vide pour les tickets de l'agent
-            List<Incident> ticketsEnAttente= new ArrayList<>();
+            // liste vide pour les tickets de l'agent
+            List<Incident> ticketsEnAttente = new ArrayList<>();
 
             // Parcours de la liste globale
             for (Incident incident : incidentEnBase) {
@@ -195,15 +196,15 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                     ticketsEnAttente.add(incident);
                 }
             }
-            return ticketsEnAttente; //liste filtrée
+            return ticketsEnAttente; // liste filtrée
         }
         return null; // Jeton invalide ou role non agent
     }
 
     private void sauvegarderDonneesIncident() {
-        //déclaration dans les parenthèses pour fermeture du fichier automatique
+        // déclaration dans les parenthèses pour fermeture du fichier automatique
         try (FileWriter writer = new FileWriter(CHEMIN_FICHIER)) {
-            //Transformation liste en texte JSON
+            // Transformation liste en texte JSON
             gson.toJson(incidentEnBase, writer);
         } catch (Exception e) {
             System.err.println("Erreur lors de la sauvegarde JSON : " + e.getMessage());
@@ -214,7 +215,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         File fichier = new File(CHEMIN_FICHIER);
         if (fichier.exists()) {
             try (FileReader reader = new FileReader(fichier)) {
-                //Astuce Gson pour lire une liste typée (permet d'instancier le bon type)
+                // Astuce Gson pour lire une liste typée (permet d'instancier le bon type)
                 Type typeListe = new TypeToken<List<Incident>>() {
                 }.getType();
                 List<Incident> usersCharges = gson.fromJson(reader, typeListe);
