@@ -180,22 +180,23 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     @Override
     public List<Incident> consulterIncidentAgent(Jeton jeton) throws RemoteException{
         debutLecture();
+
+        List<Incident> ticketsAgent = verifRoleAndCreaList(jeton);
+
+        if (ticketsAgent != null) {
+            finLecture();
+            return null;
+        }
+
         String nomAgent = auth.getLoginParJeton(jeton);
-        Role role = auth.getRoleParJeton(jeton);
 
-        if (nomAgent != null && role == AGENT) {
-            //liste vide pour les tickets de l'agent
-            List<Incident> ticketsAgent= new ArrayList<>();
-
-            // Parcours de la liste globale
-            for (Incident incident : incidentEnBase) {
+        // Parcours de la liste globale
+        for (Incident incident : incidentEnBase) {
                 if (incident.getAgentResponsable() != null && incident.getAgentResponsable().equals(nomAgent)) {
                     ticketsAgent.add(incident);
                 }
             }
-            finLecture();
-            return ticketsAgent; //liste filtrée
-        }
+
         finLecture();
         return null; // Jeton invalide ou role non agent
     }
@@ -203,8 +204,14 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     @Override
     public List<Incident> consulterIncidentEnAttente(Jeton jeton) throws RemoteException{
         debutLecture();
-            //liste vide pour les tickets de l'agent
+
+        //liste vide pour les tickets de l'agent
         List<Incident> ticketsEnAttente= verifRoleAndCreaList(jeton);
+
+        if (ticketsEnAttente == null) {
+            finLecture();
+            return null;
+        }
 
         // Parcours de la liste globale
         for (Incident incident : incidentEnBase) {
@@ -221,15 +228,17 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     public List<Incident>  consulterTouslesIncidents (Jeton jeton) throws RemoteException{
         debutLecture();
 
-        String username_Agent = auth.getLoginParJeton(jeton);
-        Role role_Agent = auth.getRoleParJeton(jeton);
+        List<Incident> tickets = verifRoleAndCreaList(jeton);
 
-        if (username_Agent != null && role_Agent == AGENT) {
+        if (tickets == null){
             finLecture();
-            return new ArrayList<>(incidentEnBase);
+            return null;
         }
+
+        tickets.addAll(incidentEnBase);
+
         finLecture();
-        return null;
+        return tickets;
     }
 
     private synchronized void sauvegarderDonneesIncident() {
