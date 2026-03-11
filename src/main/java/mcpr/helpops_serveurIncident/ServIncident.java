@@ -15,6 +15,7 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -51,7 +52,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         try {
             auth = (IAuthService) Naming.lookup("rmi://localhost:1099/AuthService");
 
-        }catch (Exception e){
+        } catch (Exception e) {
             System.err.println("Erreur critique : serveur Auth inateignable.");
         }
 

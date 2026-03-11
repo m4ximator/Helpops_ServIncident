@@ -1,0 +1,28 @@
+@startuml
+title Helpops_ServIncident V2 - Attribuer un incident (Agent)
+autonumber
+
+participant AuthService
+
+group Attribuer un incident (Agent)
+  Client -> ServIncident: attribuerIncident(jeton, id)
+  ServIncident -> AuthService: getLoginParJeton(jeton)
+  ServIncident -> AuthService: getRoleParJeton(jeton)
+
+  alt session invalide ou role non AGENT
+    ServIncident --> Client: Acces refuse
+  else AGENT valide
+    ServIncident -> ServIncident: rechercher incident par id
+    alt incident est OPEN (Concurrence OK)
+      ServIncident -> ServIncident: setAgentResponsable(nomAgent)
+      ServIncident -> ServIncident: setDatePriseEnCharge(now)
+      ServIncident -> ServIncident: setEtat(ASSIGNED)
+      ServIncident -> IncidentJson: sauvegarderDonneesIncident()
+      ServIncident --> Client: ServIncident assigne avec succes
+    else incident introuvable ou deja assigne
+      note right of ServIncident: Gestion de la concurrence:\nun seul agent peut réussir
+      ServIncident --> Client: Erreur : Assignation impossible
+    end
+  end
+end
+@enduml
