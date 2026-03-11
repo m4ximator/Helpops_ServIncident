@@ -147,9 +147,11 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService 
             if (incident.getIdentifiant() == id) {
                 attributionIncident = incident;
                 break;
-            } else {
-                return "Id ticket inexistant";
             }
+
+        }
+        if(attributionIncident==null){
+            return "Id ticket inexistant";
         }
 
         if ("OPEN".equals(attributionIncident.getEtat())) {
@@ -199,6 +201,19 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService 
             return ticketsEnAttente; // liste filtrée
         }
         return null; // Jeton invalide ou role non agent
+    }
+
+    @Override
+    public List<Incident>  consulterTouslesIncidents (Jeton jeton) throws RemoteException{
+
+        String username_Agent = auth.getLoginParJeton(jeton);
+        Role role_Agent = auth.getRoleParJeton(jeton);
+
+        if (username_Agent != null && role_Agent == AGENT) {
+            return new ArrayList<>(incidentEnBase);
+        }
+
+        return null;
     }
 
     private void sauvegarderDonneesIncident() {
