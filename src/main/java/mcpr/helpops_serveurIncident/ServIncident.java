@@ -148,6 +148,46 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     }
 
     @Override
+    public synchronized String resoudreIncident(Jeton jeton, int id, String message) throws RemoteException {
+
+        // Vérif agent
+        if (!estAgentValide(jeton)) {
+            return "Accès refusé, vous n'êtes pas un Agent.";
+        }
+
+        String nomAgent = auth.getLoginParJeton(jeton);
+        Incident incident = null;
+
+        for (Incident incident1 : incidentEnBase) {
+            if (incident1.getIdentifiant() == id) {
+                incident = incident1;
+                break;
+            }
+        }
+
+        if (incident == null) {
+            return "Ticket inexistant";
+        }
+
+        if (!nomAgent.equals(incident.getAgentResponsable())) {
+            return "Vous n'êtes pas l'agent responsable du ticket !";
+        }
+
+        if (!"Assigned".equals(incident.getEtat())) {
+            return "Le ticket ne peut pas être résolu, si il n'est pas assigné";
+        }
+
+        // Résolution du ticket il est assigné et que c'est l'agent responsable qui veut le résoudre
+        incident.setEtat("RESOLVED");
+        incident.setDateResolution(new java.util.Date());
+        incident.setMessageResolution(message);
+
+        sauvegarderDonneesIncident();
+
+        return "Ticket résolu !";
+    }
+
+    @Override
     public synchronized String attribuerIncident(Jeton jeton, int id) throws RemoteException {
         String nomAgent = auth.getLoginParJeton(jeton);
         Role role = auth.getRoleParJeton(jeton);
@@ -183,7 +223,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
         List<Incident> ticketsAgent = verifRoleAndCreaList(jeton);
 
-        if (ticketsAgent != null) {
+        if (ticketsAgent == null) {
             finLecture();
             return null;
         }
@@ -198,7 +238,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             }
 
         finLecture();
-        return null; // Jeton invalide ou role non agent
+        return ticketsAgent;
     }
 
     @Override
@@ -276,6 +316,13 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }
     }
 
+    private boolean estAgentValide(Jeton jeton) throws RemoteException {
+        String nomAgent = auth.getLoginParJeton(jeton);
+        Role role = auth.getRoleParJeton(jeton);
+
+        return nomAgent != null && role == AGENT;
+    }
+
     public List<Incident> verifRoleAndCreaList(Jeton jeton) throws RemoteException {
         String nomAgent = auth.getLoginParJeton(jeton);
         Role role = auth.getRoleParJeton(jeton);
@@ -285,6 +332,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             List<Incident> ticketsAgent = new ArrayList<>();
             return ticketsAgent;
         }
+
         else {
             return null;
         }
