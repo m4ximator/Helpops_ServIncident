@@ -371,4 +371,95 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         enEcriture = false;
         this.notifyAll();
     }
+
+
+    // Partie Stats
+
+    @Override
+    public String[] getStatistiques(Jeton jeton) throws RemoteException{
+        String nomAgent = auth.getLoginParJeton(jeton);
+        Role role = auth.getRoleParJeton(jeton);
+
+        if (nomAgent != null && role == AGENT) {
+            String[] listeStat = new String[6];
+            listeStat[0] = nbrTotal();
+            listeStat[1] = nbrTicketsResolus();
+            listeStat[2] = nbrTicketsParEtats();
+            listeStat[3] = tempsMoyenResolution();
+            listeStat[4] = ticketsParAgents();
+            listeStat[5] = tauxPression();
+            return listeStat;
+        }
+        else {
+            return null;
+        }
+    }
+
+    public String nbrTotal (){
+        return "Le nombre d'incidents en base est de : " + String.valueOf(incidentEnBase.size());
+    }
+
+    public String nbrTicketsResolus () {
+        int compte = 0;
+        for (int i = 0; i < incidentEnBase.size(); i++) {
+            if ("RESOLVED".equals(incidentEnBase.get(i).getEtat())) {
+                compte++;
+            }
+        }
+        return "Le nombre de tickets résolus est de " + String.valueOf(compte);
+    }
+
+    public String nbrTicketsParEtats(){
+        int Open= 0;
+        int Assigned = 0 ;
+        int Resolved =0;
+        for (int i = 0; i < incidentEnBase.size(); i++) {
+            Incident current = incidentEnBase.get(i);
+            String etatActuel = current.getEtat();
+            if ("OPEN".equals(etatActuel)) {
+                Open++;
+            } else if ("ASSIGNED".equals(etatActuel)) {
+                Assigned++;
+            } else {
+                Resolved++;
+            }
+        }
+        return "Répartition des tickets : " + "Ouverts :" + Open + ", " + "Assignés :" + Assigned +
+                "Résolus :" + Resolved + "." ;
+
+    }
+
+    public String tempsMoyenResolution() {
+        long totalMinutes = 0;
+        int nbTicketsResolus = 0;
+
+        for (int i = 0; i < incidentEnBase.size(); i++) {
+            Incident actuel = incidentEnBase.get(i);
+
+            if (actuel.getDateResolution() != null && actuel.getDateCreation() != null) {
+                // On calcule la différence entre les deux (en millisecondes à cause de Time)
+                long diff = incidentEnBase.get(i).getDateResolution().getTime() - actuel.getDateCreation().getTime();
+                // Conversion en minutes (1000ms * 60s)
+                long diffMinutes = diff / (1000 * 60);
+                totalMinutes += diffMinutes;
+                nbTicketsResolus++;
+            }
+        }
+
+        if (nbTicketsResolus == 0) {
+            return "Temps moyen de résolution : N/A (aucun ticket résolu)";
+        }
+
+        // Calcul moyenne
+        double moyenne = (double) totalMinutes / nbTicketsResolus;
+
+        // Retourne une String propre avec 1 décimale pour les minutes
+        return "Temps moyen de résolution : " + String.valueOf(moyenne) + " minutes";
+    }
+
+
+
+
+
+
 }
