@@ -13,9 +13,7 @@ import java.lang.reflect.Type;
 import java.rmi.Naming;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -23,7 +21,9 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
-import static mcpr.hellpops_interfaces.Role.AGENT;
+import static mcpr.hellpops_interfaces.Role.*;
+import static mcpr.hellpops_interfaces.EtatIncident.*;
+
 
 public class ServIncident extends UnicastRemoteObject implements ITicketService{
     private final String CHEMIN_FICHIER = "incident.json";
@@ -88,7 +88,6 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         if (loginDemandeur != null) {
             //liste vide pour les tickets du client
             List<Incident> ticketsDuClient = new ArrayList<>();
-            // On met à jours la liste des Incidents via le json
 
             // Parcours de la liste globale
             for (Incident incident : incidentEnBase) {
@@ -110,7 +109,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
         if (loginDemandeur != null) {
             for (Incident incident : incidentEnBase) {
-                if (incident.getIdentifiant() == id && (incident.getIdentifiantCreateur().equals(loginDemandeur) || jeton.getRole() == Role.AGENT)) {
+                if (incident.getIdentifiant() == id && (incident.getIdentifiantCreateur().equals(loginDemandeur) || jeton.getRole() == AGENT)) {
                     finLecture();
                     return incident;
                 }
@@ -148,7 +147,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     }
 
     @Override
-    public synchronized String resoudreIncident(Jeton jeton, int id, String message) throws RemoteException {
+    public String resoudreIncident(Jeton jeton, int id, String message) throws RemoteException {
 
         // Vérif agent
         if (!estAgentValide(jeton)) {
@@ -158,37 +157,43 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         String nomAgent = auth.getLoginParJeton(jeton);
         Incident incident = null;
 
-        for (Incident incident1 : incidentEnBase) {
-            if (incident1.getIdentifiant() == id) {
-                incident = incident1;
+        debutEcriture();
+
+        for (Incident current : incidentEnBase) {
+            if (current.getIdentifiant() == id) {
+                incident = current;
                 break;
             }
         }
 
         if (incident == null) {
+            finEcriture();
             return "Ticket inexistant";
         }
 
         if (!nomAgent.equals(incident.getAgentResponsable())) {
+            finEcriture();
             return "Vous n'êtes pas l'agent responsable du ticket !";
         }
 
-        if (!"Assigned".equals(incident.getEtat())) {
+        if (incident.getEtat() != ASSIGNED) {
+            finEcriture();
             return "Le ticket ne peut pas être résolu, si il n'est pas assigné";
         }
 
         // Résolution du ticket il est assigné et que c'est l'agent responsable qui veut le résoudre
-        incident.setEtat("RESOLVED");
-        incident.setDateResolution(new java.util.Date());
+        incident.setEtat(RESOLVED);
+        incident.setDateResolution(new Date());
         incident.setMessageResolution(message);
 
         sauvegarderDonneesIncident();
 
+        finEcriture();
         return "Ticket résolu !";
     }
 
     @Override
-    public synchronized String attribuerIncident(Jeton jeton, int id) throws RemoteException {
+    public String attribuerIncident(Jeton jeton, int id) throws RemoteException {
         String nomAgent = auth.getLoginParJeton(jeton);
         Role role = auth.getRoleParJeton(jeton);
 
@@ -196,6 +201,9 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         if (nomAgent == null || role != AGENT) {
             return "Accès refusé : Vous n'êtes pas un Agent ou session expirée.";
         }
+
+        debutEcriture();
+
         Incident attributionIncident = null;
         for (Incident incident : incidentEnBase) {
             if (incident.getIdentifiant() == id) {
@@ -208,12 +216,14 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             return "Id ticket inexistant";
         }
 
-        if ("OPEN".equals(attributionIncident.getEtat())) {
+        if (attributionIncident.getEtat() == OPEN) {
             attributionIncident.setAgentResponsable(nomAgent);
-            attributionIncident.setEtat("Assigned");
+            attributionIncident.setEtat(ASSIGNED);
             sauvegarderDonneesIncident();
+            finEcriture();
             return "Ticket assigné avec succes !";
         }
+        finEcriture();
         return "Impossible : Ce ticket est déjà assigné ou résolu.";
     }
 
@@ -255,7 +265,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
         // Parcours de la liste globale
         for (Incident incident : incidentEnBase) {
-            if ("OPEN".equals(incident.getEtat())) {
+            if (incident.getEtat() == OPEN) {
                 ticketsEnAttente.add(incident);
             }
         }
@@ -386,8 +396,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             listeStat[1] = nbrTicketsResolus();
             listeStat[2] = nbrTicketsParEtats();
             listeStat[3] = tempsMoyenResolution();
-            listeStat[4] = ticketsParAgents();
-            listeStat[5] = tauxPression();
+            listeStat[4] = ticketsParAgentAff();
+            listeStat[5] = "Taux de pression : En cours de développement...";//tauxPression();
             return listeStat;
         }
         else {
@@ -401,44 +411,45 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
     public String nbrTicketsResolus () {
         int compte = 0;
-        for (int i = 0; i < incidentEnBase.size(); i++) {
-            if ("RESOLVED".equals(incidentEnBase.get(i).getEtat())) {
+        for (Incident current : incidentEnBase) {
+            if (current.getEtat() == RESOLVED) {
                 compte++;
             }
         }
         return "Le nombre de tickets résolus est de " + String.valueOf(compte);
     }
 
-    public String nbrTicketsParEtats(){
-        int Open= 0;
-        int Assigned = 0 ;
-        int Resolved =0;
-        for (int i = 0; i < incidentEnBase.size(); i++) {
-            Incident current = incidentEnBase.get(i);
-            String etatActuel = current.getEtat();
-            if ("OPEN".equals(etatActuel)) {
-                Open++;
-            } else if ("ASSIGNED".equals(etatActuel)) {
-                Assigned++;
-            } else {
-                Resolved++;
+    public String nbrTicketsParEtats() {
+        int open = 0;
+        int assigned = 0;
+        int resolved = 0;
+
+        for (Incident current : incidentEnBase) {
+            switch (current.getEtat()) {
+                case OPEN:
+                    open++;
+                    break;
+                case ASSIGNED:
+                    assigned++;
+                    break;
+                case RESOLVED:
+                    resolved++;
+                    break;
             }
         }
-        return "Répartition des tickets : " + "Ouverts :" + Open + ", " + "Assignés :" + Assigned +
-                "Résolus :" + Resolved + "." ;
-
+        return String.format("Répartition des tickets : Ouverts : %d, Assignés : %d, Résolus : %d",
+                open, assigned, resolved);
     }
 
     public String tempsMoyenResolution() {
         long totalMinutes = 0;
         int nbTicketsResolus = 0;
 
-        for (int i = 0; i < incidentEnBase.size(); i++) {
-            Incident actuel = incidentEnBase.get(i);
+        for (Incident actuel : incidentEnBase) {
 
             if (actuel.getDateResolution() != null && actuel.getDateCreation() != null) {
                 // On calcule la différence entre les deux (en millisecondes à cause de Time)
-                long diff = incidentEnBase.get(i).getDateResolution().getTime() - actuel.getDateCreation().getTime();
+                long diff = actuel.getDateResolution().getTime() - actuel.getDateCreation().getTime();
                 // Conversion en minutes (1000ms * 60s)
                 long diffMinutes = diff / (1000 * 60);
                 totalMinutes += diffMinutes;
@@ -457,9 +468,36 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         return "Temps moyen de résolution : " + String.valueOf(moyenne) + " minutes";
     }
 
+    public Map<String, Integer> ticketsParAgent (){
+        Map<String, Integer> statAgents = new HashMap<>();
+        for (Incident incident : incidentEnBase){
+            if (incident.getAgentResponsable()!=null){
+                String agent = incident.getAgentResponsable();
+                statAgents.put(agent, statAgents.getOrDefault(agent, 0) + 1);
+            }
+        }
+        return statAgents;
+    }
 
+    public String ticketsParAgentAff() {
+        Map<String, Integer> statAgents = ticketsParAgent();
 
+        if (statAgents.isEmpty()) {
+            return "Aucun ticket n'est assigné pour le moment.";
+        }
 
+        StringBuilder affichage = new StringBuilder("Répartition des tickets par agent :\n");
+
+        for (Map.Entry<String, Integer> entree : statAgents.entrySet()) {
+            String nomAgent = entree.getKey();
+            int nbTickets = entree.getValue();
+
+            affichage.append("  - Agent '").append(nomAgent)
+                    .append("' : ").append(nbTickets)
+                    .append(" ticket(s)\n");
+        }
+        return affichage.toString();
+    }
 
 
 }
