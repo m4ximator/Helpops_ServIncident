@@ -86,6 +86,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         String loginDemandeur = auth.getLoginParJeton(jeton);
 
         if (loginDemandeur != null) {
+
+            debutLecture();
             //liste vide pour les tickets du client
             List<Incident> ticketsDuClient = new ArrayList<>();
 
@@ -95,6 +97,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                     ticketsDuClient.add(incident);
                 }
             }
+            finLecture();
             return ticketsDuClient; //liste filtrée
         }
         return null; // Jeton invalide
@@ -391,6 +394,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         Role role = auth.getRoleParJeton(jeton);
 
         if (nomAgent != null && role == AGENT) {
+            debutLecture();
+
             String[] listeStat = new String[6];
             listeStat[0] = nbrTotal();
             listeStat[1] = nbrTicketsResolus();
@@ -398,6 +403,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             listeStat[3] = tempsMoyenResolution();
             listeStat[4] = ticketsParAgentAff();
             listeStat[5] = "Taux de pression : En cours de développement...";//tauxPression();
+
+            finLecture();
             return listeStat;
         }
         else {
@@ -498,6 +505,5 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }
         return affichage.toString();
     }
-
 
 }
