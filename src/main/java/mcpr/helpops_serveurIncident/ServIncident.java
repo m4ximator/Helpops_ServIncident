@@ -402,7 +402,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             listeStat[2] = nbrTicketsParEtats();
             listeStat[3] = tempsMoyenResolution();
             listeStat[4] = ticketsParAgentAff();
-            listeStat[5] = "Taux de pression : En cours de développement...";//tauxPression();
+            listeStat[5] = tauxPression();
 
             finLecture();
             return listeStat;
@@ -413,7 +413,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     }
 
     public String nbrTotal (){
-        return "Le nombre d'incidents en base est de : " + String.valueOf(incidentEnBase.size());
+        return "Le nombre d'incidents en base est de : " + String.valueOf(incidentEnBase.size() + "");
     }
 
     public String nbrTicketsResolus () {
@@ -423,7 +423,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                 compte++;
             }
         }
-        return "Le nombre de tickets résolus est de " + String.valueOf(compte);
+        return "\nLe nombre de tickets résolus est de " + String.valueOf(compte) ;
     }
 
     public String nbrTicketsParEtats() {
@@ -444,7 +444,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                     break;
             }
         }
-        return String.format("Répartition des tickets : Ouverts : %d, Assignés : %d, Résolus : %d",
+        return String.format("\nRépartition des tickets : Ouverts : %d, Assignés : %d, Résolus : %d",
                 open, assigned, resolved);
     }
 
@@ -465,14 +465,14 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }
 
         if (nbTicketsResolus == 0) {
-            return "Temps moyen de résolution : N/A (aucun ticket résolu)";
+            return "\nTemps moyen de résolution : N/A (aucun ticket résolu)";
         }
 
         // Calcul moyenne
         double moyenne = (double) totalMinutes / nbTicketsResolus;
 
         // Retourne une String propre avec 1 décimale pour les minutes
-        return "Temps moyen de résolution : " + String.valueOf(moyenne) + " minutes";
+        return "\nTemps moyen de résolution : " + String.valueOf(moyenne) + " minutes";
     }
 
     public Map<String, Integer> ticketsParAgent (){
@@ -490,10 +490,10 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         Map<String, Integer> statAgents = ticketsParAgent();
 
         if (statAgents.isEmpty()) {
-            return "Aucun ticket n'est assigné pour le moment.";
+            return "\nAucun ticket n'est assigné pour le moment";
         }
 
-        StringBuilder affichage = new StringBuilder("Répartition des tickets par agent :\n");
+        StringBuilder affichage = new StringBuilder("\nRépartition des tickets par agent :\n");
 
         for (Map.Entry<String, Integer> entree : statAgents.entrySet()) {
             String nomAgent = entree.getKey();
@@ -501,8 +501,42 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
             affichage.append("  - Agent '").append(nomAgent)
                     .append("' : ").append(nbTickets)
-                    .append(" ticket(s)\n");
+                    .append(" ticket(s)");
         }
+        return affichage.toString();
+    }
+
+
+    public String tauxPression() {
+        Map<String,Integer> statAgents= ticketsParAgent();
+        int nbAgents = statAgents.size();
+        int nbTotalTickets =incidentEnBase.size();
+
+        // Recherche date + ancienne
+        long dateLaPlusAncienne = System.currentTimeMillis();
+        for (int i=0;i<incidentEnBase.size();i++) {
+            Incident actuel = incidentEnBase.get(i);
+            if (actuel.getDateCreation()!=null && actuel.getDateCreation().getTime() < dateLaPlusAncienne) {
+                dateLaPlusAncienne=actuel.getDateCreation().getTime();
+            }
+        }
+        if (nbTotalTickets == 0) return "\nTaux de pression : 0 (Aucun ticket)";
+        if (nbAgents == 0) return "\nTaux de pression : "+ nbTotalTickets +" (Aucun agent n'est assigné)";
+
+        // Calcul temps et pression
+        long nbJour = (System.currentTimeMillis()-dateLaPlusAncienne)/(1000 * 3600 * 24);
+            // Cas si ticket crée le jour même que son test
+        if (nbJour < 1) {nbJour = 1;}
+
+        double pression = (double)nbTotalTickets/nbAgents/nbJour;
+
+        StringBuilder affichage = new StringBuilder("\nStatistiques de pression :\n");
+        affichage.append(" - Total tickets : ").append(nbTotalTickets).append("\n")
+                .append(" - Agents actifs : ").append(nbAgents).append("\n")
+                .append(" - Jours d'activité : ").append(nbJour).append("\n")
+                .append("   => Taux de pression : ").append(String.format("%.2f", pression))
+                .append(" ticket(s) / agent / jour");
+
         return affichage.toString();
     }
 
