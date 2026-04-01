@@ -197,14 +197,13 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
     @Override
     public String attribuerIncident(Jeton jeton, int id) throws RemoteException {
-        String nomAgent = auth.getLoginParJeton(jeton);
-        Role role = auth.getRoleParJeton(jeton);
 
         // Verification droits
-        if (nomAgent == null || role != AGENT) {
+        if (!estAgentValide(jeton)) {
             return "Accès refusé : Vous n'êtes pas un Agent ou session expirée.";
         }
 
+        String nomAgent = auth.getLoginParJeton(jeton);
         debutEcriture();
 
         Incident attributionIncident = null;
@@ -337,10 +336,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     }
 
     public List<Incident> verifRoleAndCreaList(Jeton jeton) throws RemoteException {
-        String nomAgent = auth.getLoginParJeton(jeton);
-        Role role = auth.getRoleParJeton(jeton);
 
-        if (nomAgent != null && role == AGENT) {
+        if (estAgentValide(jeton)) {
             //liste vide pour les tickets de l'agent
             List<Incident> ticketsAgent = new ArrayList<>();
             return ticketsAgent;
@@ -390,10 +387,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
     @Override
     public String[] getStatistiques(Jeton jeton) throws RemoteException{
-        String nomAgent = auth.getLoginParJeton(jeton);
-        Role role = auth.getRoleParJeton(jeton);
 
-        if (nomAgent != null && role == AGENT) {
+        if (estAgentValide(jeton)) {
             debutLecture();
 
             String[] listeStat = new String[6];
