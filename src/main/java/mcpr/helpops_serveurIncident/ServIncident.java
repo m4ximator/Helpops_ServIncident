@@ -387,10 +387,16 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
     @Override
     public String[] getStatistiques(Jeton jeton) throws RemoteException{
+
         if (!estAgentValide(jeton)) {
             return null;
         }
-        return statistique.getStat(jeton, incidentEnBase);
+
+        Statistique statistique = new Statistique();
+        debutLecture();
+        String [] tabStat = statistique.getStat(jeton, incidentEnBase);
+        finLecture();
+        return tabStat;
     }
 
 }
