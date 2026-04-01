@@ -400,6 +400,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             listeStat[5] = tauxPression();
 
             finLecture();
+
             return listeStat;
         }
         else {
@@ -458,14 +459,11 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                 nbTicketsResolus++;
             }
         }
-
         if (nbTicketsResolus == 0) {
             return "\nTemps moyen de résolution : N/A (aucun ticket résolu)";
         }
-
         // Calcul moyenne
-        double moyenne = (double) totalMinutes / nbTicketsResolus;
-
+        float moyenne = (float) totalMinutes / nbTicketsResolus;
         // Retourne une String propre avec 1 décimale pour les minutes
         return "\nTemps moyen de résolution : " + String.valueOf(moyenne) + " minutes";
     }
