@@ -27,8 +27,6 @@ import static mcpr.hellpops_interfaces.EtatIncident.*;
 public class ServIncident extends UnicastRemoteObject implements ITicketService{
     private final String CHEMIN_FICHIER = "incident.json";
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
-    private Statistique statistique = new Statistique();
-
     private IAuthService auth;
 
     // Base de données thread-safe pour les incidents
