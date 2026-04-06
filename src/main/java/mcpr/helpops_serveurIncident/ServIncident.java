@@ -143,7 +143,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             }
             sauvegarderDonneesIncident();
             finEcriture();
-            notifierSuperviseurs("📝 Ticket #" + id + " mis à jour par " + loginDemandeur);
+            notifierSuperviseurs("Ticket #" + id + " mis à jour par " + loginDemandeur);
             return incidentToModif;
         }
         else{
