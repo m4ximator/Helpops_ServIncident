@@ -1,10 +1,6 @@
 package mcpr.helpops_serveurIncident;
 
-import mcpr.hellpops_interfaces.Incident;
-import mcpr.hellpops_interfaces.IAuthService;
-import mcpr.hellpops_interfaces.ITicketService;
-import mcpr.hellpops_interfaces.Jeton;
-import mcpr.hellpops_interfaces.Role;
+import mcpr.hellpops_interfaces.*;
 
 import java.io.File;
 import java.io.FileReader;
@@ -28,6 +24,9 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     private final String CHEMIN_FICHIER = "incident.json";
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private IAuthService auth;
+    private final LinkedList <String> historiqueEvents = new LinkedList<>();
+    private final List<ISupervision> superviseurs = new ArrayList<>();
+
 
     // Base de données thread-safe pour les incidents
     private final List<Incident> incidentEnBase = new ArrayList<>();
@@ -36,6 +35,10 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     private final AtomicInteger compteurId = new AtomicInteger(0);
     private int nbEnLecture=0;
     private boolean enEcriture=false;
+
+    // Compteur pour la partie supervision
+    private int nbSupervision = 0;
+    private boolean enSupervision = false;
 
     public ServIncident() throws RemoteException {
         super();
@@ -333,6 +336,13 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         return nomAgent != null && role == AGENT;
     }
 
+    protected boolean estSuperviseurValide(Jeton jeton) throws RemoteException {
+        String nomSuperviseur = auth.getLoginParJeton(jeton);
+        Role role = auth.getRoleParJeton(jeton);
+
+        return nomSuperviseur != null && role == SUPERVISEUR;
+    }
+
     public List<Incident> verifRoleAndCreaList(Jeton jeton) throws RemoteException {
 
         if (estAgentValide(jeton)) {
@@ -381,6 +391,42 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     }
 
 
+    // Verrous supervisions
+
+    public synchronized void debutLectureSupervision() {
+        while(enSupervision) {
+            try {
+                this.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        nbSupervision++;
+    }
+
+    public synchronized void finLectureSupervision() {
+        nbSupervision--;
+        if(nbSupervision==0) {
+            this.notify();
+        }
+    }
+
+    private synchronized void debutEcritureSupervision() {
+        while(enSupervision || nbSupervision>0) {
+            try {
+                this.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        enSupervision = true;
+    }
+
+    private synchronized void finEcritureSupervision() {
+        enSupervision = false;
+        this.notifyAll();
+    }
+
     // Partie Stats
 
     @Override
@@ -395,6 +441,84 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         String [] tabStat = statistique.getStat(jeton, incidentEnBase);
         finLecture();
         return tabStat;
+    }
+
+    private void ajoutEventshistorique (String message)  {
+        historiqueEvents.add(message);
+
+        if (historiqueEvents.size() > 20) {
+
+            historiqueEvents.removeFirst();
+
+        }
+    }
+
+    private void notifierSuperviseurs(String message) {
+        List<ISupervision> copieSuperviseurs = ajoutEvent(message);
+        List<ISupervision> superviseursErreur = envoyerEvent(copieSuperviseurs, message);
+
+        if (!superviseursErreur.isEmpty()) {
+            supprimerSuperviseurs(superviseursErreur);
+        }
+    }
+
+    private List<ISupervision> ajoutEvent(String message) {
+        debutEcritureSupervision();
+        ajoutEventshistorique(message);
+        List<ISupervision> copieSuperviseurs = new ArrayList<>(superviseurs);
+        finEcritureSupervision();
+
+        return copieSuperviseurs;
+    }
+
+    private List<ISupervision> envoyerEvent(List<ISupervision> copieSuperviseurs, String message) {
+        List<ISupervision> superviseursErreur = new ArrayList<>();
+
+        for (ISupervision supervision : copieSuperviseurs) {
+            try {
+                supervision.recevoirEvenement(message);
+            } catch (Exception e) {
+                superviseursErreur.add(supervision);
+            }
+        }
+
+        return superviseursErreur;
+    }
+
+    private void supprimerSuperviseurs(List<ISupervision> superviseursErreur) {
+        debutEcritureSupervision();
+        superviseurs.removeAll(superviseursErreur);
+        finEcritureSupervision();
+    }
+
+    @Override
+    public synchronized void abonnerFluxDirect(ISupervision iSupervision, Jeton jeton) throws RemoteException {
+
+        if (!estSuperviseurValide(jeton)) {
+            throw new RemoteException("Accès refusé : Vous devez être un Superviseur.");
+        }
+
+        debutEcritureSupervision();
+        superviseurs.add(iSupervision);
+        finEcritureSupervision();
+
+    }
+
+    @Override
+    public synchronized List<String> abonnerAvecRattrapage(ISupervision iSupervision, Jeton jeton) throws RemoteException {
+
+        if (!estSuperviseurValide(jeton)) {
+            throw new RemoteException("Accès refusé : Vous devez être un Superviseur.");
+        }
+
+        List <String> copieEvent;
+
+        debutEcritureSupervision();
+        superviseurs.add(iSupervision);
+        copieEvent = new ArrayList<>(historiqueEvents);
+        finEcritureSupervision();
+
+        return copieEvent;
     }
 
 }
