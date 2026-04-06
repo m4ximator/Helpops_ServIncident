@@ -10,6 +10,7 @@ import java.rmi.Naming;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.gson.Gson;
@@ -25,7 +26,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private IAuthService auth;
     private final LinkedList <String> historiqueEvents = new LinkedList<>();
-    private final List<ISupervision> superviseurs = new ArrayList<>();
+    private final List<ISupervision> superviseurs = new CopyOnWriteArrayList<>();
 
 
     // Base de données thread-safe pour les incidents
@@ -77,6 +78,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             //On sauvegarde le nouvel incident dans un json
             sauvegarderDonneesIncident();
             finEcriture();
+            notifierSuperviseurs(chaine + " (État: OPEN)");
             return chaine.toString();
         }
         return "Session Expirée";
@@ -141,10 +143,12 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             }
             sauvegarderDonneesIncident();
             finEcriture();
+            notifierSuperviseurs("📝 Ticket #" + id + " mis à jour par " + loginDemandeur);
             return incidentToModif;
         }
         else{
             System.out.println("Un utilisateur essaye de modifier un ticket qui n'est pas sien");
+            notifierSuperviseurs("ALERTE SÉCURITÉ : L'utilisateur '" + loginDemandeur + "' a tenté de modifier le ticket #" + id + " sans autorisation !");
             return null;
         }
 
@@ -191,8 +195,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         incident.setMessageResolution(message);
 
         sauvegarderDonneesIncident();
-
         finEcriture();
+        notifierSuperviseurs("Ticket #" + id + " résolu par " + nomAgent + " (État: RESOLVED)");
         return "Ticket résolu !";
     }
 
@@ -203,7 +207,6 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         if (!estAgentValide(jeton)) {
             return "Accès refusé : Vous n'êtes pas un Agent ou session expirée.";
         }
-
         String nomAgent = auth.getLoginParJeton(jeton);
         debutEcriture();
 
@@ -224,6 +227,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             attributionIncident.setEtat(ASSIGNED);
             sauvegarderDonneesIncident();
             finEcriture();
+            notifierSuperviseurs("Ticket #" + id + " assigné à " + nomAgent + " (État: ASSIGNED)");
             return "Ticket assigné avec succes !";
         }
         finEcriture();
@@ -391,42 +395,6 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     }
 
 
-    // Verrous supervisions
-
-    public synchronized void debutLectureSupervision() {
-        while(enSupervision) {
-            try {
-                this.wait();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        nbSupervision++;
-    }
-
-    public synchronized void finLectureSupervision() {
-        nbSupervision--;
-        if(nbSupervision==0) {
-            this.notify();
-        }
-    }
-
-    private synchronized void debutEcritureSupervision() {
-        while(enSupervision || nbSupervision>0) {
-            try {
-                this.wait();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        enSupervision = true;
-    }
-
-    private synchronized void finEcritureSupervision() {
-        enSupervision = false;
-        this.notifyAll();
-    }
-
     // Partie Stats
 
     @Override
@@ -443,53 +411,29 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         return tabStat;
     }
 
-    private void ajoutEventshistorique (String message)  {
+    private synchronized void ajoutEventshistorique (String message)  {
         historiqueEvents.add(message);
 
         if (historiqueEvents.size() > 20) {
-
             historiqueEvents.removeFirst();
-
         }
     }
 
     private void notifierSuperviseurs(String message) {
-        List<ISupervision> copieSuperviseurs = ajoutEvent(message);
-        List<ISupervision> superviseursErreur = envoyerEvent(copieSuperviseurs, message);
-
-        if (!superviseursErreur.isEmpty()) {
-            supprimerSuperviseurs(superviseursErreur);
-        }
-    }
-
-    private List<ISupervision> ajoutEvent(String message) {
-        debutEcritureSupervision();
+        // sauvegarde dans l'historique
         ajoutEventshistorique(message);
-        List<ISupervision> copieSuperviseurs = new ArrayList<>(superviseurs);
-        finEcritureSupervision();
 
-        return copieSuperviseurs;
-    }
-
-    private List<ISupervision> envoyerEvent(List<ISupervision> copieSuperviseurs, String message) {
-        List<ISupervision> superviseursErreur = new ArrayList<>();
-
-        for (ISupervision supervision : copieSuperviseurs) {
+        // envoie à tous les abonnés en direct
+        for (ISupervision supervision : superviseurs) {
             try {
                 supervision.recevoirEvenement(message);
             } catch (Exception e) {
-                superviseursErreur.add(supervision);
+                System.out.println("Un superviseur s'est déconnecté.");
+                superviseurs.remove(supervision);
             }
         }
-
-        return superviseursErreur;
     }
 
-    private void supprimerSuperviseurs(List<ISupervision> superviseursErreur) {
-        debutEcritureSupervision();
-        superviseurs.removeAll(superviseursErreur);
-        finEcritureSupervision();
-    }
 
     @Override
     public synchronized void abonnerFluxDirect(ISupervision iSupervision, Jeton jeton) throws RemoteException {
@@ -497,11 +441,9 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         if (!estSuperviseurValide(jeton)) {
             throw new RemoteException("Accès refusé : Vous devez être un Superviseur.");
         }
-
-        debutEcritureSupervision();
         superviseurs.add(iSupervision);
-        finEcritureSupervision();
 
+        notifierSuperviseurs("Un nouveau superviseur (" + auth.getLoginParJeton(jeton) + ") a rejoint le flux en direct.");
     }
 
     @Override
@@ -513,11 +455,9 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
         List <String> copieEvent;
 
-        debutEcritureSupervision();
         superviseurs.add(iSupervision);
         copieEvent = new ArrayList<>(historiqueEvents);
-        finEcritureSupervision();
-
+        notifierSuperviseurs("Un nouveau superviseur (" + auth.getLoginParJeton(jeton) + ") a rejoint le flux en direct.");
         return copieEvent;
     }
 
