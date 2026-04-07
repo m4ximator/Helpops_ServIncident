@@ -10,7 +10,6 @@ import java.rmi.Naming;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.gson.Gson;
@@ -25,22 +24,18 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
     private final String CHEMIN_FICHIER = "incident.json";
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private IAuthService auth;
-    private final LinkedList <String> historiqueEvents = new LinkedList<>();
-    private final List<ISupervision> superviseurs = new CopyOnWriteArrayList<>();
-
 
     // Base de données thread-safe pour les incidents
     private final List<Incident> incidentEnBase = new ArrayList<>();
+    private final GestionnaireSupervision gestionnaireSupervision;
 
     // Compteur thread-safe pour générer les identifiants
     private final AtomicInteger compteurId = new AtomicInteger(0);
     private int nbEnLecture=0;
     private boolean enEcriture=false;
 
-    // Compteur pour la partie supervision
-    private int nbSupervision = 0;
-    private boolean enSupervision = false;
 
+    //Initialise le serveurIncident, et le connecte au serveur d'authentification via RMI
     public ServIncident() throws RemoteException {
         super();
         chargerDonneesIncident();
@@ -57,9 +52,11 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         } catch (Exception e) {
             System.err.println("Erreur critique : serveur Auth inateignable.");
         }
+        this.gestionnaireSupervision = new GestionnaireSupervision(auth);
 
     }
 
+    // Permet à un utilisateur ou un agent de créer un incident
     @Override
     public String creerIncident(Jeton jeton, String categorie, String titre, String desc) throws RemoteException {
         // Demande au serveur Auth à qui appartient le jeton
@@ -78,12 +75,13 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             //On sauvegarde le nouvel incident dans un json
             sauvegarderDonneesIncident();
             finEcriture();
-            notifierSuperviseurs(chaine + " (État: OPEN)");
+            gestionnaireSupervision.notifierSuperviseurs(chaine + " (État: OPEN)");
             return chaine.toString();
         }
         return "Session Expirée";
     }
 
+    // Permet à un utilisateur ou à un agent de consulter la liste de ses incidents
     @Override
     public List<Incident> consulterListeIncident(Jeton jeton) throws RemoteException {
         String loginDemandeur = auth.getLoginParJeton(jeton);
@@ -125,6 +123,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         return null;
     }
 
+    // Permet à un utilisateur ou un agent de modifier l'un de ses incidents
     @Override
     public Incident modifierIncident(Jeton jeton, int id, String categorie, String titre, String desc) throws RemoteException {
         Incident incidentToModif = consulterIncidentDetail(jeton, id);
@@ -143,20 +142,20 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             }
             sauvegarderDonneesIncident();
             finEcriture();
-            notifierSuperviseurs("Ticket #" + id + " mis à jour par " + loginDemandeur);
+            gestionnaireSupervision.notifierSuperviseurs("Ticket #" + id + " mis à jour par " + loginDemandeur);
             return incidentToModif;
         }
         else{
             System.out.println("Un utilisateur essaye de modifier un ticket qui n'est pas sien");
-            notifierSuperviseurs("ALERTE SÉCURITÉ : L'utilisateur '" + loginDemandeur + "' a tenté de modifier le ticket #" + id + " sans autorisation !");
+            gestionnaireSupervision.notifierSuperviseurs("ALERTE SÉCURITÉ : L'utilisateur '" + loginDemandeur + "' a tenté de modifier le ticket #" + id + " sans autorisation !");
             return null;
         }
 
     }
 
+    // Permet à un agent de résoudre un incident lui étant attribué. Renvoie une erreur sinon
     @Override
     public String resoudreIncident(Jeton jeton, int id, String message) throws RemoteException {
-
         // Vérif agent
         if (!estAgentValide(jeton)) {
             return "Accès refusé, vous n'êtes pas un Agent.";
@@ -164,7 +163,6 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
         String nomAgent = auth.getLoginParJeton(jeton);
         Incident incident = null;
-
         debutEcriture();
 
         for (Incident current : incidentEnBase) {
@@ -173,17 +171,14 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                 break;
             }
         }
-
         if (incident == null) {
             finEcriture();
             return "Ticket inexistant";
         }
-
         if (!nomAgent.equals(incident.getAgentResponsable())) {
             finEcriture();
             return "Vous n'êtes pas l'agent responsable du ticket !";
         }
-
         if (incident.getEtat() != ASSIGNED) {
             finEcriture();
             return "Le ticket ne peut pas être résolu, si il n'est pas assigné";
@@ -196,10 +191,11 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
 
         sauvegarderDonneesIncident();
         finEcriture();
-        notifierSuperviseurs("Ticket #" + id + " résolu par " + nomAgent + " (État: RESOLVED)");
+        gestionnaireSupervision.notifierSuperviseurs("Ticket #" + id + " résolu par " + nomAgent + " (État: RESOLVED)");
         return "Ticket résolu !";
     }
 
+    // Permet d'attribuer un incident à un agent, en modifiant le statut du ticket et son agent responsable
     @Override
     public String attribuerIncident(Jeton jeton, int id) throws RemoteException {
 
@@ -216,52 +212,47 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
                 attributionIncident = incident;
                 break;
             }
-
         }
         if (attributionIncident==null){
             return "Id ticket inexistant";
         }
-
         if (attributionIncident.getEtat() == OPEN) {
             attributionIncident.setAgentResponsable(nomAgent);
             attributionIncident.setEtat(ASSIGNED);
             sauvegarderDonneesIncident();
             finEcriture();
-            notifierSuperviseurs("Ticket #" + id + " assigné à " + nomAgent + " (État: ASSIGNED)");
+            gestionnaireSupervision.notifierSuperviseurs("Ticket #" + id + " assigné à " + nomAgent + " (État: ASSIGNED)");
             return "Ticket assigné avec succes !";
         }
         finEcriture();
         return "Impossible : Ce ticket est déjà assigné ou résolu.";
     }
 
+    // permet de consulter les incidents de l'agent
     @Override
     public List<Incident> consulterIncidentAgent(Jeton jeton) throws RemoteException{
         debutLecture();
-
         List<Incident> ticketsAgent = verifRoleAndCreaList(jeton);
 
         if (ticketsAgent == null) {
             finLecture();
             return null;
         }
-
         String nomAgent = auth.getLoginParJeton(jeton);
-
         // Parcours de la liste globale
         for (Incident incident : incidentEnBase) {
             if (incident.getAgentResponsable() != null && incident.getAgentResponsable().equals(nomAgent)) {
                 ticketsAgent.add(incident);
             }
         }
-
         finLecture();
         return ticketsAgent;
     }
 
+    // Permet de consulter les incidents en attente
     @Override
     public List<Incident> consulterIncidentEnAttente(Jeton jeton) throws RemoteException{
         debutLecture();
-
         //liste vide pour les tickets de l'agent
         List<Incident> ticketsEnAttente= verifRoleAndCreaList(jeton);
 
@@ -269,7 +260,6 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             finLecture();
             return null;
         }
-
         // Parcours de la liste globale
         for (Incident incident : incidentEnBase) {
             if (incident.getEtat() == OPEN) {
@@ -278,26 +268,23 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }
         finLecture();
         return ticketsEnAttente; //liste filtrée
-
     }
 
+    //Permet de consulter tout les incidents
     @Override
     public List<Incident>  consulterTouslesIncidents (Jeton jeton) throws RemoteException{
         debutLecture();
-
         List<Incident> tickets = verifRoleAndCreaList(jeton);
 
         if (tickets == null){
             finLecture();
             return null;
         }
-
         tickets.addAll(incidentEnBase);
-
         finLecture();
         return tickets;
     }
-
+    // Sauvegarde les données des incidents contenues dans la liste dans un fichier json
     private synchronized void sauvegarderDonneesIncident() {
         //déclaration dans les parenthèses pour fermeture du fichier automatique
         try (FileWriter writer = new FileWriter(CHEMIN_FICHIER)) {
@@ -308,6 +295,8 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }
     }
 
+    // Charge les tickets à partir d'un fichier json nommé incident.json dans une liste
+    // Si le fichier n'existe pas, en crée un
     private void chargerDonneesIncident() {
         File fichier = new File(CHEMIN_FICHIER);
         if (fichier.exists()) {
@@ -332,14 +321,14 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
             System.out.println("Aucun fichier JSON trouvé, démarrage avec une base vide.");
         }
     }
-
+    // Vérifie la validité de l'agent et renvoie un boolean
     protected boolean estAgentValide(Jeton jeton) throws RemoteException {
         String nomAgent = auth.getLoginParJeton(jeton);
         Role role = auth.getRoleParJeton(jeton);
 
         return nomAgent != null && role == AGENT;
     }
-
+    // Vérifie la validité du superviseur et renvoie un boolean
     protected boolean estSuperviseurValide(Jeton jeton) throws RemoteException {
         String nomSuperviseur = auth.getLoginParJeton(jeton);
         Role role = auth.getRoleParJeton(jeton);
@@ -347,19 +336,22 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         return nomSuperviseur != null && role == SUPERVISEUR;
     }
 
+    // Vérifie que l'agent et valide et crée une liste de ses incidents assignés si oui
     public List<Incident> verifRoleAndCreaList(Jeton jeton) throws RemoteException {
-
         if (estAgentValide(jeton)) {
             //liste vide pour les tickets de l'agent
             List<Incident> ticketsAgent = new ArrayList<>();
             return ticketsAgent;
         }
-
         else {
             return null;
         }
     }
 
+
+    // Partie Lecteur Redacteur
+
+    //Ajoute un lecteur si personne n'est en écriture
     public synchronized void debutLecture() {
         while(enEcriture) {
             try {
@@ -371,6 +363,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         nbEnLecture++;
     }
 
+    // Enlève un membre de la lecture et notifie les processus en attente
     public synchronized void finLecture() {
         nbEnLecture--;
         if(nbEnLecture==0) {
@@ -378,6 +371,7 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         }
     }
 
+    // Passe en écriture si personne n'écrie et personne ne lit
     public synchronized void debutEcriture() {
         while(enEcriture || nbEnLecture>0) {
             try {
@@ -389,14 +383,14 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         enEcriture = true;
     }
 
+    // Libère la place et notifie les processus en attente
     public synchronized void finEcriture() {
         enEcriture = false;
         this.notifyAll();
     }
 
 
-    // Partie Stats
-
+    // Partie Stats via la classe Statistique
     @Override
     public String[] getStatistiques(Jeton jeton) throws RemoteException{
 
@@ -411,54 +405,16 @@ public class ServIncident extends UnicastRemoteObject implements ITicketService{
         return tabStat;
     }
 
-    private synchronized void ajoutEventshistorique (String message)  {
-        historiqueEvents.add(message);
 
-        if (historiqueEvents.size() > 20) {
-            historiqueEvents.removeFirst();
-        }
-    }
-
-    private void notifierSuperviseurs(String message) {
-        // sauvegarde dans l'historique
-        ajoutEventshistorique(message);
-
-        // envoie à tous les abonnés en direct
-        for (ISupervision supervision : superviseurs) {
-            try {
-                supervision.recevoirEvenement(message);
-            } catch (Exception e) {
-                System.out.println("Un superviseur s'est déconnecté.");
-                superviseurs.remove(supervision);
-            }
-        }
-    }
-
-
+    // Partie Appel GestionnaireSupervision
     @Override
-    public synchronized void abonnerFluxDirect(ISupervision iSupervision, Jeton jeton) throws RemoteException {
-
-        if (!estSuperviseurValide(jeton)) {
-            throw new RemoteException("Accès refusé : Vous devez être un Superviseur.");
-        }
-        superviseurs.add(iSupervision);
-
-        notifierSuperviseurs("Un nouveau superviseur (" + auth.getLoginParJeton(jeton) + ") a rejoint le flux en direct.");
+    public void abonnerFluxDirect(ISupervision iSupervision, Jeton jeton) throws RemoteException {
+        gestionnaireSupervision.abonnerFluxDirect(iSupervision, jeton);
     }
 
     @Override
-    public synchronized List<String> abonnerAvecRattrapage(ISupervision iSupervision, Jeton jeton) throws RemoteException {
-
-        if (!estSuperviseurValide(jeton)) {
-            throw new RemoteException("Accès refusé : Vous devez être un Superviseur.");
-        }
-
-        List <String> copieEvent;
-
-        superviseurs.add(iSupervision);
-        copieEvent = new ArrayList<>(historiqueEvents);
-        notifierSuperviseurs("Un nouveau superviseur (" + auth.getLoginParJeton(jeton) + ") a rejoint le flux en direct.");
-        return copieEvent;
+    public List<String> abonnerAvecRattrapage(ISupervision iSupervision, Jeton jeton) throws RemoteException {
+        return gestionnaireSupervision.abonnerAvecRattrapage(iSupervision, jeton);
     }
 
 }
